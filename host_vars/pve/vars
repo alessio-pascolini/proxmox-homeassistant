@@ -1,0 +1,13 @@
+---
+ansible_host: "pve0.pascolini.local"
+ansible_ssh_user: root
+pve_api_user: "{{ vault_pve_api_user }}"
+pve_api_password: "{{ vault_pve_api_password }}"
+pve_node: "pve0"
+vm_storage_id: "local-zfs"
+ha_version: "6.6"
+ha_vm_name: "homeassistant"
+ha_image_url: "https://github.com/home-assistant/operating-system/releases/download/{{ ha_version }}/haos_ova-{{ ha_version }}.qcow2.xz"
+ha_comp_image_name: "{{ ha_image_url | basename }}"
+ha_image_name: "{{ ha_comp_image_name | splitext | first }}"
+...

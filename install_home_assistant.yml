@@ -1,0 +1,75 @@
+---
+- name: Install homeassistant on pve
+  hosts: pve
+  tasks:
+    - name: Create homeassistant kvm machine
+      community.general.proxmox_kvm:
+        proxmox_default_behavior: no_defaults
+        api_user: "{{ pve_api_user }}"
+        api_password: "{{ pve_api_password }}"
+        api_host: "{{ ansible_host }}"
+        agent: yes
+        autostart: yes
+        bios: ovmf
+        boot: c
+        bootdisk: scsi0
+        cores: 2
+        machine: q35
+        memory: 2048
+        name: "{{ ha_vm_name }}"
+        net:
+          net0: "model=virtio,bridge=vmbr0"
+        node: "{{ pve_node }}"
+        onboot: yes
+        ostype: l26
+        scsihw: virtio-scsi-pci
+        state: present
+      register: ha_vm
+      delegate_to: 127.0.0.1
+      connection: local
+
+    - block:
+      - name: Download ha os image
+        ansible.builtin.get_url:
+          url: "{{ ha_image_url }}"
+          dest: /root/
+
+      - name: Decompress ha image
+        ansible.builtin.command:
+          cmd: "unxz -k -f {{ ha_comp_image_name }}"
+          creates: "/root/{{ ha_image_name }}"
+
+      - name: Import ha disk image
+        ansible.builtin.command:
+          cmd: "qm importdisk {{ ha_vm.vmid }} /root/{{ ha_image_name }} {{ vm_storage_id }} --format raw"
+          removes: "/root/{{ ha_image_name }}"
+
+      - name: Attach disk
+        ansible.builtin.command:
+          cmd: "qm set {{ ha_vm.vmid }} --scsi0 {{ vm_storage_id }}:vm-{{ ha_vm.vmid }}-disk-0"
+
+      - name: Remove ha disk image
+        ansible.builtin.file:
+          path: "/root/{{ item }}"
+          state: absent
+        loop:
+          - "{{ ha_image_name }}"
+          - "{{ ha_comp_image_name }}"
+
+      - name: Add efi disk
+        ansible.builtin.command:
+          cmd: "qm set {{ ha_vm.vmid }} -efidisk0 {{ vm_storage_id }}:1,efitype=4m,format=raw,pre-enrolled-keys=0"
+
+      - name: Start ha vm
+        community.general.proxmox_kvm:
+          proxmox_default_behavior: no_defaults
+          api_user: "{{ pve_api_user }}"
+          api_password: "{{ pve_api_password }}"
+          api_host: "{{ ansible_host }}"
+          node: "{{ pve_node }}"
+          vmid: "{{ ha_vm.vmid }}"
+          state: started
+        delegate_to: 127.0.0.1
+        connection: local
+      when: ha_vm.vmid is defined
+...
